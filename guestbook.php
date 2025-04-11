@@ -3,35 +3,49 @@
 session_start();
 
 // TODO: render guestBook comments — function
+
+$aConfig = require_once 'config.php';
+
+$db = mysqli_connect(
+    $aConfig['host'],
+    $aConfig['user'],
+    $aConfig['pass'],
+    $aConfig['name']
+);
+
+if (!$db) {
+    die("Connection failed: " . mysqli_connect_error());
+}
+// оновлена функція для рендеру комментів
 function renderComments()
 {
-    if (file_exists('comments.csv')) {
-        $file = fopen('comments.csv', 'r');
-        while (!feof($file)) {
-            $line = fgets($file);
-            $data = json_decode($line, true);
-            if ($data) {
-                echo "<div class='card mb-2 p-2'>";
-                echo "<strong>" . htmlspecialchars($data['name']) . "</strong> (" . htmlspecialchars($data['email']) . ") <br>";
-                echo "<small>{$data['date']}</small><br>";
-                echo "<p>" . nl2br(htmlspecialchars($data['text'])) . "</p>";
-                echo "</div>";
-            }
+    global $db;
+    $query = 'SELECT * FROM comments ORDER BY date DESC';
+    $result = mysqli_query($db, $query);
+
+    if ($result) {
+        while ($comment = mysqli_fetch_assoc($result)) {
+            echo "<div class='card mb-2 p-2'>";
+            echo "<strong>" . htmlspecialchars($comment['name']) . "</strong> (" . htmlspecialchars($comment['email']) . ") <br>";
+            echo "<small>{$comment['date']}</small><br>";
+            echo "<p>" . nl2br(htmlspecialchars($comment['text'])) . "</p>";
+            echo "</div>";
         }
-        fclose($file);
+    } else {
+        echo "Error: " . mysqli_error($db);
     }
 }
 
 // TODO 2: ROUTING (not used explicitly here)
 
 // TODO 3: CODE by REQUEST METHODS (handle data from form)
-$errors = [];
 
+// оновлений код форми для комментів
+$errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim(isset($_POST['email']) ? $_POST['email'] : '');
     $name = trim(isset($_POST['name']) ? $_POST['name'] : '');
     $text = trim(isset($_POST['text']) ? $_POST['text'] : '');
-
 
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Некоректний email.";
@@ -53,16 +67,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'date' => date('Y-m-d H:i:s')
         ];
 
-        $jsonString = json_encode($comment);
-        $file = fopen('comments.csv', 'a');
-        fwrite($file, $jsonString . "\n");
-        fclose($file);
+        $query = "INSERT INTO comments (email, name, text, date) VALUES (
+            '".mysqli_real_escape_string($db, $comment['email'])."',
+            '".mysqli_real_escape_string($db, $comment['name'])."',
+            '".mysqli_real_escape_string($db, $comment['text'])."',
+            '".$comment['date']."'
+        )";
 
-        header("Location: " . $_SERVER['PHP_SELF']);
-        exit;
+        if (mysqli_query($db, $query)) {
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
+        } else {
+            $errors[] = "Error inserting comment: " . mysqli_error($db);
+        }
     }
 }
 ?>
+
+
 
 <!DOCTYPE html>
 <html>
@@ -124,3 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 </body>
 </html>
+
+<?php
+mysqli_close($db);
+?>
